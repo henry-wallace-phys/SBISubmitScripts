@@ -24,8 +24,8 @@ logs_folder="${base_path}/logs"
 
 data_logs_folder="${logs_folder}/data-logs"
 model_logs_folder="${logs_folder}/model-logs"
+sbi_logs_folder="${logs_folder}/sbi-logs"
 
-sbi_logs_folder="${base_path}/sbi-logs"
 scripts_folder="${base_path}/scripts"
 
 mkdir -p "${data_folder}" "${models_folder}" "${logs_folder}" "${sbi_logs_folder}" "${data_logs_folder}" "${model_logs_folder}" "${scripts_folder}"
@@ -38,20 +38,31 @@ cp ${SCRIPT_DIR}/scripts/generate_data.sh "${scripts_folder}/"
 cp ${SCRIPT_DIR}/scripts/train_sbi.sh "${scripts_folder}/"
 
 # Submit generate_data job
-echo "Submitting data generation..."
-DATAGEN_JOB_ID=$(sbatch --output="${data_logs_folder}/datagen_%x_%A_%a.out" \
-                         --error="${data_logs_folder}/datagen_%x_%A_%a.err" \
-                         "${SCRIPT_DIR}/scripts/generate_data.sh" "${data_folder}" "${n_sim_per_job}" | awk '{print $4}')
-echo "Data generation job ID: ${DATAGEN_JOB_ID}"
+# Check data folder has files to avoid resubmitting data generation if it has already been done
+if [ -z "$(ls -A ${data_folder})" ]; then
+    echo "No data files found in ${data_folder}, submitting data generation job..."
+    echo "Submitting data generation..."
+    DATAGEN_JOB_ID=$(sbatch --output="${data_logs_folder}/datagen_%x_%A_%a.out" \
+                            --error="${data_logs_folder}/datagen_%x_%A_%a.err" \
+                            "${SCRIPT_DIR}/scripts/generate_data.sh" "${data_folder}" "${n_sim_per_job}" | awk '{print $4}')
+    echo "Data generation job ID: ${DATAGEN_JOB_ID}"
+
+    job_dependency="--dependency=afterok:${DATAGEN_JOB_ID}"
+
+else
+    echo "Data files already exist in ${data_folder}, skipping data generation step."
+    job_dependency=""
+fi
+
 
 # Submit training job which will self-resume if a model file exists
 echo "Submitting training job (array size ${n_array})..."
-TRAIN_JOB_ID=$(sbatch --dependency=afterok:${DATAGEN_JOB_ID} \
-                       --array=1-${n_array}%1 \
+TRAIN_JOB_ID=$(sbatch  --array=1-${n_array}%1 \
                        --output="${model_logs_folder}/sbi_model_%x_%A_%a.out" \
                        --error="${model_logs_folder}/sbi_model_%x_%A_%a.err" \
+                       ${job_dependency} \
                        "${SCRIPT_DIR}/scripts/train_sbi.sh" \
-                       "${data_folder}" "${models_folder}" "${sbi_logs_folder}" | awk '{print $4}')
+                        "${data_folder}" "${models_folder}" "${sbi_logs_folder}" | awk '{print $4}')
 echo "Training job ID: ${TRAIN_JOB_ID} (array jobs 1-${n_array})"
 
 echo "Analysis workflow submitted successfully!"

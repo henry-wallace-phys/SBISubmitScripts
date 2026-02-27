@@ -21,11 +21,10 @@ mkdir -p "${models_folder}" "${sbi_logs_folder}"
 
 module restore
 
-fit_label=initial_training
-model_label=tutorial_1M.ts
+model_label=256hid_20tr.ts
 
 # Create model directory
-model="${models_folder}/${fit_label}"
+model="${models_folder}"
 mkdir -p "${model}"
 
 # check for existing model file to resume
@@ -52,13 +51,13 @@ build_posterior --mach3-type ${mach3_type} \
                 --save-file ${model}/${model_label} \
                 ${resume_arg} \
                 --hidden-features 256 \
-                --num-transforms  15\
+                --num-transforms  20\
                 --batch-size 8192 \
-                --learning-rate 5e-5 \
+                --learning-rate 1e-4 \
                 --num-workers ${SLURM_CPUS_PER_TASK} \
                 --cyclical-pars 'delta_cp' \
                 --tensorboard-dir ${sbi_logs_folder}/${fit_label} \
-                --stop-after-epochs 100\
-                --max-epochs 60000
+                --stop-after-epochs 300\
+                --max-epochs 6000000
 
 echo "Job finished"
